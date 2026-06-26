@@ -87,8 +87,8 @@ impl Board {
     }
 
     pub fn make_move(&mut self, chess_move: Move) -> bool {
-        let from_index = Position::index(chess_move.from);
-        let to_index = Position::index(chess_move.to);
+        let from_index = chess_move.from.index();
+        let to_index = chess_move.to.index();
 
         let Some(piece) = self.piece_at(from_index) else {
             return false;

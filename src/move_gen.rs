@@ -57,7 +57,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     file: current_file as usize,
                                 };
 
-                                match board.piece_at(Position::index(target_square)) {
+                                match board.piece_at(target_square.index()) {
                                     Some(val) => {
                                         if val.color != color {
                                             moves.push(Move {
@@ -121,7 +121,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                             file: position.file,
                         };
 
-                        if board.piece_at(Position::index(target_square)).is_none() {
+                        if board.piece_at(target_square.index()).is_none() {
                             moves.push(Move {
                                 from: position,
                                 to: target_square,
@@ -137,7 +137,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     rank: two_ahead as usize,
                                     file: position.file,
                                 };
-                                if board.piece_at(Position::index(target_square)).is_none() {
+                                if board.piece_at(target_square.index()).is_none() {
                                     moves.push(Move {
                                         from: position,
                                         to: target_square,
@@ -157,7 +157,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                 file: (position.file as i32 + df) as usize,
                             };
 
-                            if let Some(val) = board.piece_at(Position::index(target_square))
+                            if let Some(val) = board.piece_at(target_square.index())
                                 && piece.color != val.color
                             {
                                 moves.push(Move {
@@ -192,7 +192,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     file: current_file as usize,
                                 };
 
-                                match board.piece_at(Position::index(target_square)) {
+                                match board.piece_at(target_square.index()) {
                                     Some(val) => {
                                         if val.color != color {
                                             moves.push(Move {
@@ -230,7 +230,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     file: current_file as usize,
                                 };
 
-                                match board.piece_at(Position::index(target_square)) {
+                                match board.piece_at(target_square.index()) {
                                     Some(val) => {
                                         if val.color != color {
                                             moves.push(Move {
@@ -274,7 +274,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     file: current_file as usize,
                                 };
 
-                                match board.piece_at(Position::index(target_square)) {
+                                match board.piece_at(target_square.index()) {
                                     Some(val) => {
                                         if val.color != color {
                                             moves.push(Move {
@@ -303,10 +303,30 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
 }
 
 fn filter_moves(board: &Board, moves: &mut Vec<Move>, color: Color) {
-    moves.retain(|m| match board.piece_at(Position::index(m.to)) {
+    moves.retain(|m| match board.piece_at(m.to.index()) {
         Some(piece) => piece.color != color,
         None => true,
     });
+}
+
+fn gen_legal_moves(board: &Board, from: usize) -> Vec<Move> {
+    let mut legal_moves: Vec<Move> = Vec::new();
+    let moves = gen_moves(board, from);
+    for chess_move in moves {
+        let mut board_copy = *board;
+
+        if let Some(piece) = Board::piece_at(&board_copy, chess_move.from.index()) {
+            let color = piece.color;
+            board_copy.make_move(chess_move);
+            if board_copy.is_in_check(color) {
+                continue;
+            }
+
+            legal_moves.push(chess_move);
+        }
+    }
+
+    legal_moves
 }
 
 #[cfg(test)]
@@ -626,5 +646,148 @@ mod tests {
         assert!(has_move(&moves, 3, 4));
         assert!(has_move(&moves, 3, 5));
         assert!(!has_move(&moves, 3, 6));
+    }
+
+    #[test]
+    fn legal_moves_allow_normal_move_when_king_safe() {
+        let mut board = Board::new();
+
+        let king = Position { rank: 0, file: 4 };
+        let knight = Position { rank: 3, file: 3 };
+
+        board.set_piece(
+            king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            knight.index(),
+            Some(test_piece(PieceType::Knight, Color::White)),
+        );
+
+        let moves = gen_legal_moves(&board, knight.index());
+
+        assert!(has_move(&moves, 5, 4));
+        assert_eq!(moves.len(), 8);
+    }
+
+    #[test]
+    fn legal_moves_filter_out_moves_that_leave_king_in_check() {
+        let mut board = Board::new();
+
+        let king = Position { rank: 0, file: 4 };
+        let rook = Position { rank: 1, file: 4 };
+        let enemy_rook = Position { rank: 7, file: 4 };
+
+        board.set_piece(
+            king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            rook.index(),
+            Some(test_piece(PieceType::Rook, Color::White)),
+        );
+        board.set_piece(
+            enemy_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_legal_moves(&board, rook.index());
+
+        assert!(has_move(&moves, 2, 4));
+        assert!(has_move(&moves, 7, 4));
+
+        assert!(!has_move(&moves, 1, 0));
+        assert!(!has_move(&moves, 1, 7));
+    }
+
+    #[test]
+    fn legal_moves_can_capture_checking_piece() {
+        let mut board = Board::new();
+
+        let king = Position { rank: 0, file: 4 };
+        let rook = Position { rank: 1, file: 7 };
+        let enemy_rook = Position { rank: 0, file: 7 };
+
+        board.set_piece(
+            king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            rook.index(),
+            Some(test_piece(PieceType::Rook, Color::White)),
+        );
+        board.set_piece(
+            enemy_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_legal_moves(&board, rook.index());
+
+        assert!(has_move(&moves, 0, 7));
+    }
+    #[test]
+    fn legal_moves_filter_king_moving_into_check() {
+        let mut board = Board::new();
+
+        let king = Position { rank: 0, file: 4 };
+        let enemy_rook = Position { rank: 7, file: 5 };
+
+        board.set_piece(
+            king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            enemy_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_legal_moves(&board, king.index());
+
+        assert!(!has_move(&moves, 0, 5));
+        assert!(!has_move(&moves, 1, 5));
+    }
+
+    #[test]
+    fn pinned_piece_can_only_move_along_pin_line() {
+        let mut board = Board::new();
+
+        let king = Position { rank: 0, file: 4 };
+        let bishop = Position { rank: 1, file: 4 };
+        let enemy_rook = Position { rank: 7, file: 4 };
+
+        board.set_piece(
+            king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            bishop.index(),
+            Some(test_piece(PieceType::Bishop, Color::White)),
+        );
+        board.set_piece(
+            enemy_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_legal_moves(&board, bishop.index());
+
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
+    fn starting_position_has_twenty_legal_white_moves() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        let mut total = 0;
+
+        for i in 0..64 {
+            if let Some(piece) = board.piece_at(i)
+                && piece.color == Color::White
+            {
+                total += gen_legal_moves(&board, i).len();
+            }
+        }
+
+        assert_eq!(total, 20);
     }
 }
