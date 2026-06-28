@@ -1,6 +1,6 @@
 use crate::{
     chess_move::Move,
-    move_gen::gen_moves,
+    move_gen::{gen_legal_moves, gen_legal_moves_for_color},
     piece::{Color, Piece, PieceType},
     position::Position,
 };
@@ -87,10 +87,7 @@ impl Board {
     }
 
     pub fn make_move(&mut self, chess_move: Move) -> bool {
-        let from_index = chess_move.from.index();
-        let to_index = chess_move.to.index();
-
-        let Some(piece) = self.piece_at(from_index) else {
+        let Some(piece) = self.piece_at(chess_move.from.index()) else {
             return false;
         };
 
@@ -98,20 +95,31 @@ impl Board {
             return false;
         }
 
-        let possible_moves = gen_moves(self, from_index);
+        let possible_moves = gen_legal_moves(self, chess_move.from.index());
 
-        for piece_move in possible_moves.iter() {
-            if piece_move.to == chess_move.to {
-                self.board[to_index] = self.board[from_index];
-                self.board[from_index] = None;
-                self.switch_color();
-                return true;
-            }
+        if possible_moves.contains(&chess_move) {
+            self.apply_move(chess_move);
+            self.switch_color();
+            return true;
         }
         false
     }
 
-    pub fn find_king(&self, color: Color) -> usize {
+    pub fn apply_move(&mut self, chess_move: Move) {
+        let from_index = chess_move.from.index();
+        let to_index = chess_move.to.index();
+
+        self.board[to_index] = self.board[from_index];
+        self.board[from_index] = None;
+
+        if let Some(typ) = chess_move.promotion
+            && let Some(piece) = &mut self.board[to_index]
+        {
+            piece.typ = typ;
+        }
+    }
+
+    fn find_king(&self, color: Color) -> usize {
         for (index, square) in self.board.iter().enumerate() {
             if let Some(piece) = square
                 && piece.typ == PieceType::King
@@ -123,7 +131,7 @@ impl Board {
         panic!("No {:?} king found on the board", color);
     }
 
-    pub fn is_square_attacked(&self, square: usize, attacker: Color) -> bool {
+    fn is_square_attacked(&self, square: usize, attacker: Color) -> bool {
         let Some(target_square) = Position::from_index(square) else {
             return false;
         };
@@ -344,6 +352,21 @@ impl Board {
         }
         false
     }
+    pub fn is_checkmate(&self, color: Color) -> bool {
+        let moves = gen_legal_moves_for_color(self, color);
+        if moves.is_empty() && self.is_in_check(color) {
+            return true;
+        }
+        false
+    }
+
+    pub fn is_stalemate(&self, color: Color) -> bool {
+        let moves = gen_legal_moves_for_color(self, color);
+        if moves.is_empty() && !self.is_in_check(color) {
+            return true;
+        }
+        false
+    }
 
     pub fn side_to_move(&self) -> Color {
         self.side_to_move
@@ -363,10 +386,28 @@ mod tests {
     use super::*;
     use crate::piece::{Color, Piece, PieceType};
 
+    fn add_kings(board: &mut Board) {
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+    }
+
     #[test]
     fn make_move_moves_piece_to_new_square() {
         let mut board = Board::new();
-
+        add_kings(&mut board);
         let from = Position { rank: 1, file: 0 };
         let to = Position { rank: 2, file: 0 };
 
@@ -378,7 +419,11 @@ mod tests {
             }),
         );
 
-        assert!(board.make_move(Move { from, to }));
+        assert!(board.make_move(Move {
+            from,
+            to,
+            promotion: None
+        }));
 
         assert!(board.piece_at(from.index()).is_none());
 
@@ -394,6 +439,7 @@ mod tests {
     #[test]
     fn make_move_does_not_move_illegal_move() {
         let mut board = Board::new();
+        add_kings(&mut board);
 
         let from = Position { rank: 1, file: 0 };
         let illegal = Position { rank: 4, file: 4 };
@@ -406,7 +452,11 @@ mod tests {
             }),
         );
 
-        assert!(!board.make_move(Move { from, to: illegal }));
+        assert!(!board.make_move(Move {
+            from,
+            to: illegal,
+            promotion: None
+        }));
 
         assert!(board.piece_at(illegal.index()).is_none());
         assert!(board.piece_at(from.index()).is_some());
@@ -415,6 +465,7 @@ mod tests {
     #[test]
     fn make_move_captures_enemy_piece() {
         let mut board = Board::new();
+        add_kings(&mut board);
 
         let from = Position { rank: 3, file: 3 };
         let to = Position { rank: 4, file: 4 };
@@ -435,7 +486,11 @@ mod tests {
             }),
         );
 
-        assert!(board.make_move(Move { from, to }));
+        assert!(board.make_move(Move {
+            from,
+            to,
+            promotion: None
+        }));
 
         assert!(board.piece_at(from.index()).is_none());
 
@@ -451,11 +506,16 @@ mod tests {
     #[test]
     fn make_move_from_empty_square_does_nothing() {
         let mut board = Board::new();
+        add_kings(&mut board);
 
         let from = Position { rank: 3, file: 3 };
         let to = Position { rank: 4, file: 3 };
 
-        assert!(!board.make_move(Move { from, to }));
+        assert!(!board.make_move(Move {
+            from,
+            to,
+            promotion: None
+        }));
 
         assert!(board.piece_at(from.index()).is_none());
         assert!(board.piece_at(to.index()).is_none());
@@ -733,7 +793,11 @@ mod tests {
             }),
         );
 
-        assert!(!board.make_move(Move { from, to }));
+        assert!(!board.make_move(Move {
+            from,
+            to,
+            promotion: None
+        }));
         assert!(board.piece_at(from.index()).is_some());
         assert!(board.piece_at(to.index()).is_none());
     }
@@ -741,7 +805,7 @@ mod tests {
     #[test]
     fn successful_move_switches_side_to_move() {
         let mut board = Board::new();
-
+        add_kings(&mut board);
         let from = Position { rank: 1, file: 0 };
         let to = Position { rank: 2, file: 0 };
 
@@ -753,7 +817,11 @@ mod tests {
             }),
         );
 
-        assert!(board.make_move(Move { from, to }));
+        assert!(board.make_move(Move {
+            from,
+            to,
+            promotion: None
+        }));
         assert_eq!(board.side_to_move(), Color::Black);
     }
 

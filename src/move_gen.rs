@@ -2,7 +2,7 @@ use crate::piece::Color;
 use crate::position::Position;
 use crate::{board::Board, chess_move::Move, piece::PieceType};
 
-pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
+fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
     let mut moves = Vec::new();
 
     if let Some(piece) = board.piece_at(from) {
@@ -30,7 +30,11 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                 file: new_file as usize,
                             };
 
-                            moves.push(Move { from: position, to });
+                            moves.push(Move {
+                                from: position,
+                                to,
+                                promotion: None,
+                            });
                         }
                     }
                 }
@@ -63,6 +67,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                             moves.push(Move {
                                                 from: position,
                                                 to: target_square,
+                                                promotion: None,
                                             });
                                         }
                                         break;
@@ -70,6 +75,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     None => moves.push(Move {
                                         from: position,
                                         to: target_square,
+                                        promotion: None,
                                     }),
                                 }
                             }
@@ -101,6 +107,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     rank: new_rank as usize,
                                     file: new_file as usize,
                                 },
+                                promotion: None,
                             })
                         }
                     }
@@ -122,25 +129,50 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                         };
 
                         if board.piece_at(target_square.index()).is_none() {
-                            moves.push(Move {
-                                from: position,
-                                to: target_square,
-                            });
-
                             let starting_rank = match piece.color {
                                 Color::White => 1,
                                 Color::Black => 6,
                             };
+
+                            let final_rank = match piece.color {
+                                Color::White => 7,
+                                Color::Black => 0,
+                            };
+
+                            if target_square.rank == final_rank {
+                                let promotion_pieces = [
+                                    PieceType::Queen,
+                                    PieceType::Rook,
+                                    PieceType::Bishop,
+                                    PieceType::Knight,
+                                ];
+
+                                for typ in promotion_pieces {
+                                    moves.push(Move {
+                                        from: position,
+                                        to: target_square,
+                                        promotion: Some(typ),
+                                    })
+                                }
+                            } else {
+                                moves.push(Move {
+                                    from: position,
+                                    to: target_square,
+                                    promotion: None,
+                                })
+                            }
 
                             if position.rank == starting_rank && (0..8).contains(&two_ahead) {
                                 let target_square = Position {
                                     rank: two_ahead as usize,
                                     file: position.file,
                                 };
+
                                 if board.piece_at(target_square.index()).is_none() {
                                     moves.push(Move {
                                         from: position,
                                         to: target_square,
+                                        promotion: None,
                                     })
                                 }
                             }
@@ -160,10 +192,33 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                             if let Some(val) = board.piece_at(target_square.index())
                                 && piece.color != val.color
                             {
-                                moves.push(Move {
-                                    from: position,
-                                    to: target_square,
-                                })
+                                let final_rank = match piece.color {
+                                    Color::White => 7,
+                                    Color::Black => 0,
+                                };
+
+                                if target_square.rank == final_rank {
+                                    let promotion_pieces = [
+                                        PieceType::Queen,
+                                        PieceType::Rook,
+                                        PieceType::Bishop,
+                                        PieceType::Knight,
+                                    ];
+
+                                    for typ in promotion_pieces {
+                                        moves.push(Move {
+                                            from: position,
+                                            to: target_square,
+                                            promotion: Some(typ),
+                                        })
+                                    }
+                                } else {
+                                    moves.push(Move {
+                                        from: position,
+                                        to: target_square,
+                                        promotion: None,
+                                    })
+                                }
                             }
                         }
                     }
@@ -198,6 +253,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                             moves.push(Move {
                                                 from: position,
                                                 to: target_square,
+                                                promotion: None,
                                             });
                                             break;
                                         } else {
@@ -207,6 +263,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     None => moves.push(Move {
                                         from: position,
                                         to: target_square,
+                                        promotion: None,
                                     }),
                                 }
                             }
@@ -236,6 +293,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                             moves.push(Move {
                                                 from: position,
                                                 to: target_square,
+                                                promotion: None,
                                             });
                                             break;
                                         } else {
@@ -245,6 +303,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     None => moves.push(Move {
                                         from: position,
                                         to: target_square,
+                                        promotion: None,
                                     }),
                                 }
                             }
@@ -280,6 +339,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                             moves.push(Move {
                                                 from: position,
                                                 to: target_square,
+                                                promotion: None,
                                             });
                                             break;
                                         } else {
@@ -289,6 +349,7 @@ pub fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                     None => moves.push(Move {
                                         from: position,
                                         to: target_square,
+                                        promotion: None,
                                     }),
                                 }
                             }
@@ -309,20 +370,37 @@ fn filter_moves(board: &Board, moves: &mut Vec<Move>, color: Color) {
     });
 }
 
-fn gen_legal_moves(board: &Board, from: usize) -> Vec<Move> {
+pub fn gen_legal_moves(board: &Board, from: usize) -> Vec<Move> {
     let mut legal_moves: Vec<Move> = Vec::new();
     let moves = gen_moves(board, from);
     for chess_move in moves {
         let mut board_copy = *board;
 
-        if let Some(piece) = Board::piece_at(&board_copy, chess_move.from.index()) {
+        if let Some(piece) = board_copy.piece_at(chess_move.from.index()) {
             let color = piece.color;
-            board_copy.make_move(chess_move);
+            board_copy.apply_move(chess_move);
             if board_copy.is_in_check(color) {
                 continue;
             }
 
             legal_moves.push(chess_move);
+        }
+    }
+
+    legal_moves
+}
+
+pub fn gen_legal_moves_for_color(board: &Board, color: Color) -> Vec<Move> {
+    let mut legal_moves: Vec<Move> = Vec::new();
+    for i in 0..64 {
+        let Some(piece) = board.piece_at(i) else {
+            continue;
+        };
+        if piece.color == color {
+            let moves = gen_legal_moves(board, i);
+            for chess_move in moves {
+                legal_moves.push(chess_move);
+            }
         }
     }
 
@@ -789,5 +867,215 @@ mod tests {
         }
 
         assert_eq!(total, 20);
+    }
+
+    #[test]
+    fn starting_position_white_has_20_legal_moves() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        let moves = gen_legal_moves_for_color(&board, Color::White);
+
+        assert_eq!(moves.len(), 20);
+    }
+
+    #[test]
+    fn starting_position_black_has_20_legal_moves() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        let moves = gen_legal_moves_for_color(&board, Color::Black);
+
+        assert_eq!(moves.len(), 20);
+    }
+
+    #[test]
+    fn legal_moves_for_color_only_returns_that_colors_moves() {
+        let mut board = Board::new();
+
+        let white_king = Position { rank: 0, file: 4 };
+        let black_king = Position { rank: 7, file: 4 };
+        let white_knight = Position { rank: 3, file: 3 };
+        let black_knight = Position { rank: 4, file: 4 };
+
+        board.set_piece(
+            white_king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            black_king.index(),
+            Some(test_piece(PieceType::King, Color::Black)),
+        );
+        board.set_piece(
+            white_knight.index(),
+            Some(test_piece(PieceType::Knight, Color::White)),
+        );
+        board.set_piece(
+            black_knight.index(),
+            Some(test_piece(PieceType::Knight, Color::Black)),
+        );
+
+        let moves = gen_legal_moves_for_color(&board, Color::White);
+
+        assert!(
+            moves
+                .iter()
+                .all(|m| { board.piece_at(m.from.index()).unwrap().color == Color::White })
+        );
+
+        assert!(moves.iter().any(|m| m.from == white_knight));
+        assert!(!moves.iter().any(|m| m.from == black_knight));
+    }
+
+    #[test]
+    fn legal_moves_for_color_respects_check() {
+        let mut board = Board::new();
+
+        let white_king = Position { rank: 0, file: 4 };
+        let black_king = Position { rank: 7, file: 4 };
+        let white_rook = Position { rank: 1, file: 4 };
+        let black_rook = Position { rank: 7, file: 0 };
+
+        board.set_piece(
+            white_king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            black_king.index(),
+            Some(test_piece(PieceType::King, Color::Black)),
+        );
+        board.set_piece(
+            white_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::White)),
+        );
+        board.set_piece(
+            black_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_legal_moves_for_color(&board, Color::White);
+
+        assert!(moves.iter().all(|m| {
+            let mut board_copy = board;
+            board_copy.make_move(*m);
+            !board_copy.is_in_check(Color::White)
+        }));
+    }
+
+    #[test]
+    fn checkmated_color_has_zero_legal_moves() {
+        let mut board = Board::new();
+
+        let white_king = Position { rank: 0, file: 0 };
+        let black_king = Position { rank: 7, file: 7 };
+        let black_rook = Position { rank: 0, file: 1 };
+        let black_queen = Position { rank: 1, file: 1 };
+
+        board.set_piece(
+            white_king.index(),
+            Some(test_piece(PieceType::King, Color::White)),
+        );
+        board.set_piece(
+            black_king.index(),
+            Some(test_piece(PieceType::King, Color::Black)),
+        );
+        board.set_piece(
+            black_rook.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+        board.set_piece(
+            black_queen.index(),
+            Some(test_piece(PieceType::Queen, Color::Black)),
+        );
+
+        let moves = gen_legal_moves_for_color(&board, Color::White);
+
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
+    fn white_pawn_forward_promotion_generates_four_moves() {
+        let mut board = Board::new();
+
+        let from = Position { rank: 6, file: 3 };
+
+        board.set_piece(
+            from.index(),
+            Some(test_piece(PieceType::Pawn, Color::White)),
+        );
+
+        let moves = gen_moves(&board, from.index());
+
+        assert_eq!(moves.len(), 4);
+        assert!(has_promotion(&moves, 7, 3, PieceType::Queen));
+        assert!(has_promotion(&moves, 7, 3, PieceType::Rook));
+        assert!(has_promotion(&moves, 7, 3, PieceType::Bishop));
+        assert!(has_promotion(&moves, 7, 3, PieceType::Knight));
+    }
+
+    #[test]
+    fn black_pawn_forward_promotion_generates_four_moves() {
+        let mut board = Board::new();
+
+        let from = Position { rank: 1, file: 3 };
+
+        board.set_piece(
+            from.index(),
+            Some(test_piece(PieceType::Pawn, Color::Black)),
+        );
+
+        let moves = gen_moves(&board, from.index());
+
+        assert_eq!(moves.len(), 4);
+        assert!(has_promotion(&moves, 0, 3, PieceType::Queen));
+        assert!(has_promotion(&moves, 0, 3, PieceType::Rook));
+        assert!(has_promotion(&moves, 0, 3, PieceType::Bishop));
+        assert!(has_promotion(&moves, 0, 3, PieceType::Knight));
+    }
+
+    #[test]
+    fn white_pawn_promotion_capture_generates_four_moves() {
+        let mut board = Board::new();
+
+        let from = Position { rank: 6, file: 3 };
+        let enemy = Position { rank: 7, file: 4 };
+
+        board.set_piece(
+            from.index(),
+            Some(test_piece(PieceType::Pawn, Color::White)),
+        );
+        board.set_piece(
+            enemy.index(),
+            Some(test_piece(PieceType::Rook, Color::Black)),
+        );
+
+        let moves = gen_moves(&board, from.index());
+
+        assert!(has_promotion(&moves, 7, 4, PieceType::Queen));
+        assert!(has_promotion(&moves, 7, 4, PieceType::Rook));
+        assert!(has_promotion(&moves, 7, 4, PieceType::Bishop));
+        assert!(has_promotion(&moves, 7, 4, PieceType::Knight));
+    }
+
+    #[test]
+    fn normal_pawn_move_has_no_promotion() {
+        let mut board = Board::new();
+
+        let from = Position { rank: 1, file: 3 };
+
+        board.set_piece(
+            from.index(),
+            Some(test_piece(PieceType::Pawn, Color::White)),
+        );
+
+        let moves = gen_moves(&board, from.index());
+
+        assert!(moves.iter().all(|m| m.promotion.is_none()));
+    }
+
+    fn has_promotion(moves: &[Move], rank: usize, file: usize, promotion: PieceType) -> bool {
+        moves
+            .iter()
+            .any(|m| m.to == Position { rank, file } && m.promotion == Some(promotion))
     }
 }
