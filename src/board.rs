@@ -9,6 +9,7 @@ use crate::{
 pub struct Board {
     board: [Option<Piece>; 64],
     side_to_move: Color,
+    pub castling_rights: CastlingRights,
 }
 
 impl Board {
@@ -16,12 +17,14 @@ impl Board {
         Self {
             board: [None; 64],
             side_to_move: Color::White,
+            castling_rights: CastlingRights::none(),
         }
     }
 
     pub fn starting_position(&mut self) {
         self.board = [None; 64];
         self.side_to_move = Color::White;
+        self.castling_rights = CastlingRights::all();
 
         let back_row = [
             PieceType::Rook,
@@ -109,6 +112,83 @@ impl Board {
         let from_index = chess_move.from.index();
         let to_index = chess_move.to.index();
 
+        if let Some(piece) = self.piece_at(from_index) {
+            if piece.typ == PieceType::King {
+                match piece.color {
+                    Color::White => {
+                        self.castling_rights.white_kingside = false;
+                        self.castling_rights.white_queenside = false;
+                    }
+                    Color::Black => {
+                        self.castling_rights.black_kingside = false;
+                        self.castling_rights.black_queenside = false;
+                    }
+                }
+            }
+
+            if piece.typ == PieceType::Rook {
+                match (piece.color, chess_move.from) {
+                    (Color::White, Position { rank: 0, file: 7 }) => {
+                        self.castling_rights.white_kingside = false;
+                    }
+                    (Color::White, Position { rank: 0, file: 0 }) => {
+                        self.castling_rights.white_queenside = false;
+                    }
+                    (Color::Black, Position { rank: 7, file: 7 }) => {
+                        self.castling_rights.black_kingside = false;
+                    }
+                    (Color::Black, Position { rank: 7, file: 0 }) => {
+                        self.castling_rights.black_queenside = false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let Some(captured_piece) = self.piece_at(to_index)
+            && captured_piece.typ == PieceType::Rook
+        {
+            match (captured_piece.color, chess_move.to) {
+                (Color::White, Position { rank: 0, file: 7 }) => {
+                    self.castling_rights.white_kingside = false;
+                }
+                (Color::White, Position { rank: 0, file: 0 }) => {
+                    self.castling_rights.white_queenside = false;
+                }
+                (Color::Black, Position { rank: 7, file: 7 }) => {
+                    self.castling_rights.black_kingside = false;
+                }
+                (Color::Black, Position { rank: 7, file: 0 }) => {
+                    self.castling_rights.black_queenside = false;
+                }
+                _ => {}
+            }
+        }
+
+        let moving_piece = self.board[from_index];
+
+        if let Some(piece) = moving_piece {
+            let is_castling = piece.typ == PieceType::King
+                && chess_move.from.file.abs_diff(chess_move.to.file) == 2;
+
+            if is_castling {
+                let rank = chess_move.from.rank;
+                let rook_from;
+                let rook_to;
+
+                if chess_move.to.file == 6 {
+                    rook_from = Position { rank, file: 7 };
+                    rook_to = Position { rank, file: 5 };
+                } else {
+                    rook_from = Position { rank, file: 0 };
+                    rook_to = Position { rank, file: 3 }
+                }
+
+                self.board[rook_to.index()] = self.board[rook_from.index()];
+                self.board[rook_from.index()] = None;
+            }
+        }
+
         self.board[to_index] = self.board[from_index];
         self.board[from_index] = None;
 
@@ -131,7 +211,7 @@ impl Board {
         panic!("No {:?} king found on the board", color);
     }
 
-    fn is_square_attacked(&self, square: usize, attacker: Color) -> bool {
+    pub fn is_square_attacked(&self, square: usize, attacker: Color) -> bool {
         let Some(target_square) = Position::from_index(square) else {
             return false;
         };
@@ -377,6 +457,34 @@ impl Board {
             self.side_to_move = Color::White;
         } else {
             self.side_to_move = Color::Black;
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct CastlingRights {
+    pub white_kingside: bool,
+    pub white_queenside: bool,
+    pub black_kingside: bool,
+    pub black_queenside: bool,
+}
+
+impl CastlingRights {
+    pub fn none() -> Self {
+        CastlingRights {
+            white_kingside: false,
+            white_queenside: false,
+            black_kingside: false,
+            black_queenside: false,
+        }
+    }
+
+    pub fn all() -> Self {
+        CastlingRights {
+            white_kingside: true,
+            white_queenside: true,
+            black_kingside: true,
+            black_queenside: true,
         }
     }
 }
@@ -967,5 +1075,245 @@ mod tests {
         );
 
         assert!(!board.is_square_attacked(target, Color::Black));
+    }
+
+    #[test]
+    fn white_kingside_castle_moves_rook() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+
+        let did_move = board.make_move(Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        });
+
+        assert!(did_move);
+        assert_eq!(
+            board
+                .piece_at(Position { rank: 0, file: 6 }.index())
+                .unwrap()
+                .typ,
+            PieceType::King
+        );
+        assert_eq!(
+            board
+                .piece_at(Position { rank: 0, file: 5 }.index())
+                .unwrap()
+                .typ,
+            PieceType::Rook
+        );
+        assert!(
+            board
+                .piece_at(Position { rank: 0, file: 4 }.index())
+                .is_none()
+        );
+        assert!(
+            board
+                .piece_at(Position { rank: 0, file: 7 }.index())
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn white_queenside_castle_moves_rook() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 0 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_queenside = true;
+
+        let did_move = board.make_move(Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 2 },
+            promotion: None,
+        });
+
+        assert!(did_move);
+        assert_eq!(
+            board
+                .piece_at(Position { rank: 0, file: 2 }.index())
+                .unwrap()
+                .typ,
+            PieceType::King
+        );
+        assert_eq!(
+            board
+                .piece_at(Position { rank: 0, file: 3 }.index())
+                .unwrap()
+                .typ,
+            PieceType::Rook
+        );
+        assert!(
+            board
+                .piece_at(Position { rank: 0, file: 4 }.index())
+                .is_none()
+        );
+        assert!(
+            board
+                .piece_at(Position { rank: 0, file: 0 }.index())
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn king_move_removes_both_castling_rights() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+        board.castling_rights.white_queenside = true;
+
+        board.make_move(Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 5 },
+            promotion: None,
+        });
+
+        assert!(!board.castling_rights.white_kingside);
+        assert!(!board.castling_rights.white_queenside);
+    }
+
+    #[test]
+    fn rook_move_removes_correct_castling_right() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+        board.castling_rights.white_queenside = true;
+
+        board.make_move(Move {
+            from: Position { rank: 0, file: 7 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        });
+
+        assert!(!board.castling_rights.white_kingside);
+        assert!(board.castling_rights.white_queenside);
+    }
+
+    #[test]
+    fn rook_capture_removes_correct_castling_right() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 3, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+        board.castling_rights.white_queenside = true;
+        board.side_to_move = Color::Black;
+
+        board.make_move(Move {
+            from: Position { rank: 3, file: 7 },
+            to: Position { rank: 0, file: 7 },
+            promotion: None,
+        });
+
+        assert!(!board.castling_rights.white_kingside);
+        assert!(board.castling_rights.white_queenside);
     }
 }

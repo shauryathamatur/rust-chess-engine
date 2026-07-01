@@ -111,6 +111,98 @@ fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                             })
                         }
                     }
+
+                    match piece.color {
+                        Color::White => {
+                            let e1 = Position { rank: 0, file: 4 };
+                            if position == e1
+                                && board.castling_rights.white_kingside
+                                && let Some(rook) =
+                                    board.piece_at(Position { rank: 0, file: 7 }.index())
+                                && rook.typ == PieceType::Rook
+                                && rook.color == Color::White
+                                && board
+                                    .piece_at(Position { rank: 0, file: 5 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 0, file: 6 }.index())
+                                    .is_none()
+                            {
+                                moves.push(Move {
+                                    from: position,
+                                    to: Position { rank: 0, file: 6 },
+                                    promotion: None,
+                                })
+                            }
+
+                            if position == e1
+                                && board.castling_rights.white_queenside
+                                && let Some(rook) =
+                                    board.piece_at(Position { rank: 0, file: 0 }.index())
+                                && rook.typ == PieceType::Rook
+                                && rook.color == Color::White
+                                && board
+                                    .piece_at(Position { rank: 0, file: 1 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 0, file: 2 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 0, file: 3 }.index())
+                                    .is_none()
+                            {
+                                moves.push(Move {
+                                    from: position,
+                                    to: Position { rank: 0, file: 2 },
+                                    promotion: None,
+                                })
+                            }
+                        }
+                        Color::Black => {
+                            let e8 = Position { rank: 7, file: 4 };
+                            if position == e8
+                                && board.castling_rights.black_kingside
+                                && let Some(rook) =
+                                    board.piece_at(Position { rank: 7, file: 7 }.index())
+                                && rook.typ == PieceType::Rook
+                                && rook.color == Color::Black
+                                && board
+                                    .piece_at(Position { rank: 7, file: 5 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 7, file: 6 }.index())
+                                    .is_none()
+                            {
+                                moves.push(Move {
+                                    from: position,
+                                    to: Position { rank: 7, file: 6 },
+                                    promotion: None,
+                                })
+                            }
+                            if position == e8
+                                && board.castling_rights.black_queenside
+                                && let Some(rook) =
+                                    board.piece_at(Position { rank: 7, file: 0 }.index())
+                                && rook.typ == PieceType::Rook
+                                && rook.color == Color::Black
+                                && board
+                                    .piece_at(Position { rank: 7, file: 1 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 7, file: 2 }.index())
+                                    .is_none()
+                                && board
+                                    .piece_at(Position { rank: 7, file: 3 }.index())
+                                    .is_none()
+                            {
+                                moves.push(Move {
+                                    from: position,
+                                    to: Position { rank: 7, file: 2 },
+                                    promotion: None,
+                                })
+                            }
+                        }
+                    }
                 }
             }
             PieceType::Pawn => {
@@ -378,6 +470,30 @@ pub fn gen_legal_moves(board: &Board, from: usize) -> Vec<Move> {
 
         if let Some(piece) = board_copy.piece_at(chess_move.from.index()) {
             let color = piece.color;
+            let is_castling = piece.typ == PieceType::King
+                && chess_move.from.file.abs_diff(chess_move.to.file) == 2;
+
+            if is_castling {
+                let middle_file = if chess_move.to.file == 6 { 5 } else { 3 };
+
+                let middle = Position {
+                    rank: chess_move.from.rank,
+                    file: middle_file,
+                };
+
+                let attacker = match color {
+                    Color::White => Color::Black,
+                    Color::Black => Color::White,
+                };
+
+                if board.is_square_attacked(chess_move.from.index(), attacker)
+                    || board.is_square_attacked(middle.index(), attacker)
+                    || board.is_square_attacked(chess_move.to.index(), attacker)
+                {
+                    continue;
+                }
+            }
+
             board_copy.apply_move(chess_move);
             if board_copy.is_in_check(color) {
                 continue;
@@ -410,6 +526,7 @@ pub fn gen_legal_moves_for_color(board: &Board, color: Color) -> Vec<Move> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::piece::Piece;
 
     fn move_count(piece: PieceType, rank: usize, file: usize) -> usize {
         let mut board = Board::new();
@@ -1077,5 +1194,218 @@ mod tests {
         moves
             .iter()
             .any(|m| m.to == Position { rank, file } && m.promotion == Some(promotion))
+    }
+
+    #[test]
+    fn white_kingside_castle_is_legal_when_path_is_safe() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+
+        let moves = gen_legal_moves(&board, Position { rank: 0, file: 4 }.index());
+
+        assert!(moves.contains(&Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn white_cannot_castle_while_in_check() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        // Black rook attacks e1 directly.
+        board.set_piece(
+            Position { rank: 3, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+
+        let moves = gen_legal_moves(&board, Position { rank: 0, file: 4 }.index());
+
+        assert!(!moves.contains(&Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn white_cannot_castle_through_check() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        // Black rook attacks f1, the square king passes through.
+        board.set_piece(
+            Position { rank: 3, file: 5 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+
+        let moves = gen_legal_moves(&board, Position { rank: 0, file: 4 }.index());
+
+        assert!(!moves.contains(&Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn white_cannot_castle_into_check() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 7 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::White,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+
+        // Black rook attacks g1, the king's final square.
+        board.set_piece(
+            Position { rank: 3, file: 6 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::Black,
+            }),
+        );
+
+        board.castling_rights.white_kingside = true;
+
+        let moves = gen_legal_moves(&board, Position { rank: 0, file: 4 }.index());
+
+        assert!(!moves.contains(&Move {
+            from: Position { rank: 0, file: 4 },
+            to: Position { rank: 0, file: 6 },
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn black_queenside_castle_uses_black_queenside_rights() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 7, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::Black,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 7, file: 0 }.index(),
+            Some(Piece {
+                typ: PieceType::Rook,
+                color: Color::Black,
+            }),
+        );
+        board.set_piece(
+            Position { rank: 0, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::King,
+                color: Color::White,
+            }),
+        );
+
+        board.castling_rights.black_kingside = false;
+        board.castling_rights.black_queenside = true;
+
+        let moves = gen_legal_moves(&board, Position { rank: 7, file: 4 }.index());
+
+        assert!(moves.contains(&Move {
+            from: Position { rank: 7, file: 4 },
+            to: Position { rank: 7, file: 2 },
+            promotion: None,
+        }));
     }
 }
