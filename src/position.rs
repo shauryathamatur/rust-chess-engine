@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Position {
     pub rank: usize, // between 0 and 7
     pub file: usize, // between 0 and 7

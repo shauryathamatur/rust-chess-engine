@@ -211,8 +211,25 @@ fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                         Color::White => 1,
                         Color::Black => -1,
                     };
+
+                    let starting_rank = match piece.color {
+                        Color::White => 1,
+                        Color::Black => 6,
+                    };
+
+                    let final_rank = match piece.color {
+                        Color::White => 7,
+                        Color::Black => 0,
+                    };
+
+                    let promotion_pieces = [
+                        PieceType::Queen,
+                        PieceType::Rook,
+                        PieceType::Bishop,
+                        PieceType::Knight,
+                    ];
+
                     let one_ahead = position.rank as i32 + direction;
-                    let two_ahead = position.rank as i32 + direction * 2;
 
                     if (0..8).contains(&one_ahead) {
                         let target_square = Position {
@@ -221,38 +238,23 @@ fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                         };
 
                         if board.piece_at(target_square.index()).is_none() {
-                            let starting_rank = match piece.color {
-                                Color::White => 1,
-                                Color::Black => 6,
-                            };
-
-                            let final_rank = match piece.color {
-                                Color::White => 7,
-                                Color::Black => 0,
-                            };
-
                             if target_square.rank == final_rank {
-                                let promotion_pieces = [
-                                    PieceType::Queen,
-                                    PieceType::Rook,
-                                    PieceType::Bishop,
-                                    PieceType::Knight,
-                                ];
-
                                 for typ in promotion_pieces {
                                     moves.push(Move {
                                         from: position,
                                         to: target_square,
                                         promotion: Some(typ),
-                                    })
+                                    });
                                 }
                             } else {
                                 moves.push(Move {
                                     from: position,
                                     to: target_square,
                                     promotion: None,
-                                })
+                                });
                             }
+
+                            let two_ahead = position.rank as i32 + direction * 2;
 
                             if position.rank == starting_rank && (0..8).contains(&two_ahead) {
                                 let target_square = Position {
@@ -265,11 +267,12 @@ fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                                         from: position,
                                         to: target_square,
                                         promotion: None,
-                                    })
+                                    });
                                 }
                             }
                         }
                     }
+
                     let capture_offsets = [(direction, 1), (direction, -1)];
 
                     for (dr, df) in capture_offsets {
@@ -284,32 +287,51 @@ fn gen_moves(board: &Board, from: usize) -> Vec<Move> {
                             if let Some(val) = board.piece_at(target_square.index())
                                 && piece.color != val.color
                             {
-                                let final_rank = match piece.color {
-                                    Color::White => 7,
-                                    Color::Black => 0,
-                                };
-
                                 if target_square.rank == final_rank {
-                                    let promotion_pieces = [
-                                        PieceType::Queen,
-                                        PieceType::Rook,
-                                        PieceType::Bishop,
-                                        PieceType::Knight,
-                                    ];
-
                                     for typ in promotion_pieces {
                                         moves.push(Move {
                                             from: position,
                                             to: target_square,
                                             promotion: Some(typ),
-                                        })
+                                        });
                                     }
                                 } else {
                                     moves.push(Move {
                                         from: position,
                                         to: target_square,
                                         promotion: None,
-                                    })
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    for (dr, df) in capture_offsets {
+                        if (0..8).contains(&(position.rank as i32 + dr))
+                            && (0..8).contains(&(position.file as i32 + df))
+                        {
+                            let target_square = Position {
+                                rank: (position.rank as i32 + dr) as usize,
+                                file: (position.file as i32 + df) as usize,
+                            };
+
+                            if let Some(en_passant_square) = board.en_passant_target
+                                && en_passant_square == target_square
+                            {
+                                let captured_pawn = Position {
+                                    rank: position.rank,
+                                    file: target_square.file,
+                                };
+
+                                if let Some(pawn) = board.piece_at(captured_pawn.index())
+                                    && pawn.typ == PieceType::Pawn
+                                    && pawn.color != piece.color
+                                {
+                                    moves.push(Move {
+                                        from: position,
+                                        to: target_square,
+                                        promotion: None,
+                                    });
                                 }
                             }
                         }
@@ -1405,6 +1427,119 @@ mod tests {
         assert!(moves.contains(&Move {
             from: Position { rank: 7, file: 4 },
             to: Position { rank: 7, file: 2 },
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn pawn_generates_en_passant_capture() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 4, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::White,
+            }),
+        );
+
+        board.set_piece(
+            Position { rank: 6, file: 3 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::Black,
+            }),
+        );
+
+        board.apply_move(Move {
+            from: Position { rank: 6, file: 3 }, // d7
+            to: Position { rank: 4, file: 3 },   // d5
+            promotion: None,
+        });
+
+        let moves = gen_moves(&board, Position { rank: 4, file: 4 }.index());
+
+        assert!(moves.contains(&Move {
+            from: Position { rank: 4, file: 4 }, // e5
+            to: Position { rank: 5, file: 3 },   // d6
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn pawn_does_not_generate_en_passant_without_target() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 4, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::White,
+            }),
+        );
+
+        board.set_piece(
+            Position { rank: 4, file: 3 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::Black,
+            }),
+        );
+
+        let moves = gen_moves(&board, Position { rank: 4, file: 4 }.index());
+
+        assert!(!moves.contains(&Move {
+            from: Position { rank: 4, file: 4 }, // e5
+            to: Position { rank: 5, file: 3 },   // d6
+            promotion: None,
+        }));
+    }
+
+    #[test]
+    fn pawn_does_not_generate_en_passant_after_target_expires() {
+        let mut board = Board::new();
+
+        board.set_piece(
+            Position { rank: 4, file: 4 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::White,
+            }),
+        );
+
+        board.set_piece(
+            Position { rank: 6, file: 3 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::Black,
+            }),
+        );
+
+        board.set_piece(
+            Position { rank: 1, file: 0 }.index(),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::White,
+            }),
+        );
+
+        board.apply_move(Move {
+            from: Position { rank: 6, file: 3 }, // d7
+            to: Position { rank: 4, file: 3 },   // d5
+            promotion: None,
+        });
+
+        board.apply_move(Move {
+            from: Position { rank: 1, file: 0 }, // a2
+            to: Position { rank: 2, file: 0 },   // a3
+            promotion: None,
+        });
+
+        let moves = gen_moves(&board, Position { rank: 4, file: 4 }.index());
+
+        assert!(!moves.contains(&Move {
+            from: Position { rank: 4, file: 4 }, // e5
+            to: Position { rank: 5, file: 3 },   // d6
             promotion: None,
         }));
     }

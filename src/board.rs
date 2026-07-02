@@ -10,6 +10,7 @@ pub struct Board {
     board: [Option<Piece>; 64],
     side_to_move: Color,
     pub castling_rights: CastlingRights,
+    pub en_passant_target: Option<Position>,
 }
 
 impl Board {
@@ -18,6 +19,7 @@ impl Board {
             board: [None; 64],
             side_to_move: Color::White,
             castling_rights: CastlingRights::none(),
+            en_passant_target: None,
         }
     }
 
@@ -113,6 +115,20 @@ impl Board {
         let to_index = chess_move.to.index();
 
         if let Some(piece) = self.piece_at(from_index) {
+            let is_en_passant = piece.typ == PieceType::Pawn
+                && chess_move.from.file != chess_move.to.file
+                && self.piece_at(to_index).is_none()
+                && self.en_passant_target == Some(chess_move.to);
+
+            if is_en_passant {
+                let captured_pawn = Position {
+                    rank: chess_move.from.rank,
+                    file: chess_move.to.file,
+                };
+                self.board[captured_pawn.index()] = None;
+            }
+
+            self.en_passant_target = None;
             if piece.typ == PieceType::King {
                 match piece.color {
                     Color::White => {
@@ -142,6 +158,15 @@ impl Board {
                     }
                     _ => {}
                 }
+            }
+
+            if piece.typ == PieceType::Pawn
+                && chess_move.from.rank.abs_diff(chess_move.to.rank) == 2
+            {
+                self.en_passant_target = Some(Position {
+                    rank: (chess_move.from.rank + chess_move.to.rank) / 2,
+                    file: chess_move.from.file,
+                });
             }
         }
 
@@ -1315,5 +1340,100 @@ mod tests {
 
         assert!(!board.castling_rights.white_kingside);
         assert!(board.castling_rights.white_queenside);
+    }
+
+    #[test]
+    fn double_pawn_push_sets_en_passant_target() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        board.apply_move(Move {
+            from: Position { rank: 1, file: 4 }, // e2
+            to: Position { rank: 3, file: 4 },   // e4
+            promotion: None,
+        });
+
+        assert_eq!(
+            board.en_passant_target,
+            Some(Position { rank: 2, file: 4 }) // e3
+        );
+    }
+
+    #[test]
+    fn black_double_pawn_push_sets_en_passant_target() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        board.apply_move(Move {
+            from: Position { rank: 6, file: 3 }, // d7
+            to: Position { rank: 4, file: 3 },   // d5
+            promotion: None,
+        });
+
+        assert_eq!(
+            board.en_passant_target,
+            Some(Position { rank: 5, file: 3 }) // d6
+        );
+    }
+
+    #[test]
+    fn non_double_pawn_move_clears_en_passant_target() {
+        let mut board = Board::new();
+        board.starting_position();
+
+        board.apply_move(Move {
+            from: Position { rank: 1, file: 4 }, // e2
+            to: Position { rank: 3, file: 4 },   // e4
+            promotion: None,
+        });
+
+        assert_eq!(board.en_passant_target, Some(Position { rank: 2, file: 4 }));
+
+        board.apply_move(Move {
+            from: Position { rank: 6, file: 0 }, // a7
+            to: Position { rank: 5, file: 0 },   // a6
+            promotion: None,
+        });
+
+        assert_eq!(board.en_passant_target, None);
+    }
+
+    #[test]
+    fn en_passant_removes_captured_pawn() {
+        let mut board = Board::new();
+
+        board.board[Position { rank: 4, file: 4 }.index()] = Some(Piece {
+            typ: PieceType::Pawn,
+            color: Color::White,
+        });
+
+        board.board[Position { rank: 6, file: 3 }.index()] = Some(Piece {
+            typ: PieceType::Pawn,
+            color: Color::Black,
+        });
+
+        board.apply_move(Move {
+            from: Position { rank: 6, file: 3 }, // d7
+            to: Position { rank: 4, file: 3 },   // d5
+            promotion: None,
+        });
+
+        board.apply_move(Move {
+            from: Position { rank: 4, file: 4 }, // e5
+            to: Position { rank: 5, file: 3 },   // d6
+            promotion: None,
+        });
+
+        assert_eq!(
+            board.piece_at(Position { rank: 5, file: 3 }.index()),
+            Some(Piece {
+                typ: PieceType::Pawn,
+                color: Color::White,
+            })
+        );
+
+        assert_eq!(board.piece_at(Position { rank: 4, file: 4 }.index()), None);
+        assert_eq!(board.piece_at(Position { rank: 4, file: 3 }.index()), None);
+        assert_eq!(board.en_passant_target, None);
     }
 }
