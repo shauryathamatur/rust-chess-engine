@@ -477,12 +477,145 @@ impl Board {
         self.side_to_move
     }
 
-    fn switch_color(&mut self) {
+    pub fn switch_color(&mut self) {
         if self.side_to_move == Color::Black {
             self.side_to_move = Color::White;
         } else {
             self.side_to_move = Color::Black;
         }
+    }
+
+    pub fn from_fen(fen: &str) -> Board {
+        let mut board = Board::new();
+        board.board = [None; 64];
+        board.castling_rights = CastlingRights::none();
+        board.en_passant_target = None;
+
+        let mut parts = fen.split_whitespace();
+
+        let pieces = parts.next().expect("Missing piece placement");
+        let side = parts.next().expect("Missing side to move");
+        let castling = parts.next().expect("Missing castling rights");
+        let en_passant = parts.next().expect("Missing en passant square");
+
+        let mut rank: i32 = 7;
+        let mut file: usize = 0;
+
+        for c in pieces.chars() {
+            if c == '/' {
+                rank -= 1;
+                file = 0;
+                continue;
+            }
+
+            if let Some(digit) = c.to_digit(10) {
+                file += digit as usize;
+            } else {
+                let index = (rank as usize) * 8 + file;
+                board.board[index] = match c {
+                    'k' => Some(Piece {
+                        typ: PieceType::King,
+                        color: Color::Black,
+                    }),
+                    'q' => Some(Piece {
+                        typ: PieceType::Queen,
+                        color: Color::Black,
+                    }),
+                    'r' => Some(Piece {
+                        typ: PieceType::Rook,
+                        color: Color::Black,
+                    }),
+                    'n' => Some(Piece {
+                        typ: PieceType::Knight,
+                        color: Color::Black,
+                    }),
+                    'b' => Some(Piece {
+                        typ: PieceType::Bishop,
+                        color: Color::Black,
+                    }),
+                    'p' => Some(Piece {
+                        typ: PieceType::Pawn,
+                        color: Color::Black,
+                    }),
+                    'K' => Some(Piece {
+                        typ: PieceType::King,
+                        color: Color::White,
+                    }),
+                    'Q' => Some(Piece {
+                        typ: PieceType::Queen,
+                        color: Color::White,
+                    }),
+                    'R' => Some(Piece {
+                        typ: PieceType::Rook,
+                        color: Color::White,
+                    }),
+                    'N' => Some(Piece {
+                        typ: PieceType::Knight,
+                        color: Color::White,
+                    }),
+                    'B' => Some(Piece {
+                        typ: PieceType::Bishop,
+                        color: Color::White,
+                    }),
+                    'P' => Some(Piece {
+                        typ: PieceType::Pawn,
+                        color: Color::White,
+                    }),
+                    _ => panic!("Invalid FEN"),
+                };
+                file += 1;
+            }
+        }
+
+        board.side_to_move = match side {
+            "w" => Color::White,
+            "b" => Color::Black,
+            _ => panic!("Invalid side to move"),
+        };
+
+        for c in castling.chars() {
+            if c == 'k' {
+                board.castling_rights.black_kingside = true;
+            } else if c == 'q' {
+                board.castling_rights.black_queenside = true;
+            } else if c == 'K' {
+                board.castling_rights.white_kingside = true;
+            } else if c == 'Q' {
+                board.castling_rights.white_queenside = true;
+            }
+        }
+
+        if en_passant != "-" {
+            let chars: Vec<char> = en_passant.chars().collect();
+
+            let file = match chars[0] {
+                'a' => 0,
+                'b' => 1,
+                'c' => 2,
+                'd' => 3,
+                'e' => 4,
+                'f' => 5,
+                'g' => 6,
+                'h' => 7,
+                _ => panic!("Invalid en passant file"),
+            };
+
+            let rank = match chars[1] {
+                '1' => 0,
+                '2' => 1,
+                '3' => 2,
+                '4' => 3,
+                '5' => 4,
+                '6' => 5,
+                '7' => 6,
+                '8' => 7,
+                _ => panic!("Invalid en passant rank"),
+            };
+
+            board.en_passant_target = Some(Position { rank, file });
+        }
+
+        board
     }
 }
 
