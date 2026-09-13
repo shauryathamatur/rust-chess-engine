@@ -224,16 +224,16 @@ impl Board {
         }
     }
 
-    fn find_king(&self, color: Color) -> usize {
+    fn find_king(&self, color: Color) -> Result<usize, String> {
         for (index, square) in self.board.iter().enumerate() {
             if let Some(piece) = square
                 && piece.typ == PieceType::King
                 && piece.color == color
             {
-                return index;
+                return Ok(index);
             }
         }
-        panic!("No {:?} king found on the board", color);
+        Err(String::from("King not found"))
     }
 
     pub fn is_square_attacked(&self, square: usize, attacker: Color) -> bool {
@@ -442,7 +442,11 @@ impl Board {
     }
 
     pub fn is_in_check(&self, color: Color) -> bool {
-        let king_pos = self.find_king(color);
+        let king_pos = match self.find_king(color) {
+            Ok(king_pos) => king_pos,
+            Err(err) => panic!("{}", err),
+        };
+
         match color {
             Color::White => {
                 if self.is_square_attacked(king_pos, Color::Black) {
