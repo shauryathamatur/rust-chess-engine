@@ -1,6 +1,6 @@
 use crate::{Board, chess_move::Move, evaluation::evaluate, move_gen::gen_legal_moves_for_color};
 
-pub fn negamax(board: &Board, depth: i32, color: i32) -> (i32, Option<Move>) {
+pub fn negamax(board: &Board, depth: i32, mut a: i32, b: i32, color: i32) -> (i32, Option<Move>) {
     let moves = gen_legal_moves_for_color(board, board.side_to_move());
 
     if moves.is_empty() {
@@ -22,11 +22,16 @@ pub fn negamax(board: &Board, depth: i32, color: i32) -> (i32, Option<Move>) {
         let mut board_copy = *board;
         board_copy.make_move(mv);
 
-        let score = -(negamax(&board_copy, depth - 1, -color).0);
+        let score = -(negamax(&board_copy, depth - 1, -b, -a, -color).0);
 
         if score > max {
             max = score;
             best_move = Some(mv);
+        }
+
+        a = std::cmp::max(a, score);
+        if a >= b {
+            break;
         }
     }
 
