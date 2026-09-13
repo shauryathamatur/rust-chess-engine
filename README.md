@@ -22,10 +22,10 @@ A chess engine written from scratch in Rust as a learning project.
 - Negamax search
 - Checkmate and stalemate handling during search
 - Unit test coverage
+- Alpha-beta pruning
 
 ## Planned Features
 
-- Alpha-beta pruning
 - Move ordering
 - 50-move rule
 - Threefold repetition
